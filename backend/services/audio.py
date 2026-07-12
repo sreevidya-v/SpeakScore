@@ -49,6 +49,9 @@ async def validate_and_load(file: UploadFile) -> bytes:
         raise HTTPException(status_code=400, detail="unsupported_audio_type")
 
     audio_bytes = await file.read(MAX_AUDIO_SIZE_BYTES + 1)
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="invalid_audio")
+
     if len(audio_bytes) > MAX_AUDIO_SIZE_BYTES:
         raise HTTPException(status_code=400, detail="audio_file_too_large")
 

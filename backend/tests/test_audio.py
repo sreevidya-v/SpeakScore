@@ -57,6 +57,14 @@ def test_too_long_audio_is_rejected() -> None:
     assert response.json() == {"detail": "duration_out_of_range"}
 
 
+def test_empty_audio_is_rejected() -> None:
+    """Empty audio uploads are rejected before ffprobe is invoked."""
+    response = post_audio(b"")
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "invalid_audio"}
+
+
 def test_missing_consent_is_rejected() -> None:
     """Audio cannot be analyzed before explicit consent is supplied."""
     response = post_audio(make_sine_wav(30), consent=None)
