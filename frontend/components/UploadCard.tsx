@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import DetailedResults from "./DetailedResults";
+import AudioRecorder from "./AudioRecorder";
+import AudioPlayer from "./AudioPlayer";
 
 interface PhonemeIssue {
   type: "substitution" | "omission" | "insertion";
@@ -20,12 +22,15 @@ interface AnalysisResponse {
 }
 
 export default function UploadCard() {
+  const [tab, setTab] = useState<"record" | "upload">("record");
   const [file, setFile] = useState<File | null>(null);
+  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [consent, setConsent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [durationError, setDurationError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResponse | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const validateAudioDuration = async (
     audioFile: File
@@ -40,6 +45,15 @@ export default function UploadCard() {
       console.error("Error decoding audio:", error);
       return null;
     }
+  };
+
+  const handleRecordingComplete = async (blob: Blob, duration: number) => {
+    const file = new File([blob], `recording-${Date.now()}.webm`, {
+      type: "audio/webm",
+    });
+    setRecordedBlob(blob);
+    setFile(file);
+    setDurationError(null);
   };
 
   const handleFileChange = async (
@@ -106,71 +120,140 @@ export default function UploadCard() {
     }
   };
 
-  const isSubmitDisabled =
-    !file || !consent || loading || durationError !== null;
-
   return (
     <div className="w-full">
       {!result ? (
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="bg-white rounded-xl shadow-lg p-8 border border-gray-100">
-            <div className="mb-8">
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
-                Pronunciation Scorer
+          <div className="bg-white rounded-2xl shadow-2xl p-10 border border-gray-200">
+            {/* Header */}
+            <div className="mb-10">
+              <h1 className="text-5xl font-bold text-gray-900 mb-2">
+                🎤 Pronunciation Master
               </h1>
               <p className="text-gray-600 text-lg">
-                Improve your English pronunciation with AI-powered feedback
+                Record or upload audio to get instant pronunciation feedback powered by AI
               </p>
             </div>
 
-            {/* File Upload */}
+            {/* Tabs */}
+            <div className="flex gap-4 mb-8 border-b-2 border-gray-200">
+              <button
+                type="button"
+                onClick={() => {
+                  setTab("record");
+                  setFile(null);
+                  setRecordedBlob(null);
+                  setDurationError(null);
+                }}
+                className={`pb-3 px-4 font-semibold text-lg transition-all border-b-2 -mb-0.5 ${
+                  tab === "record"
+                    ? "text-gray-900 border-gray-900"
+                    : "text-gray-500 border-transparent hover:text-gray-700"
+                }`}
+              >
+                🎙️ Record Audio
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setTab("upload");
+                  setFile(null);
+                  setRecordedBlob(null);
+                  setDurationError(null);
+                }}
+                className={`pb-3 px-4 font-semibold text-lg transition-all border-b-2 -mb-0.5 ${
+                  tab === "upload"
+                    ? "text-gray-900 border-gray-900"
+                    : "text-gray-500 border-transparent hover:text-gray-700"
+                }`}
+              >
+                📁 Upload File
+              </button>
+            </div>
+
+            {/* Content Area */}
             <div className="mb-8">
-              <label className="block text-sm font-semibold text-gray-900 mb-3">
-                📁 Upload Your Audio
-              </label>
-              <div className="relative">
-                <input
-                  type="file"
-                  accept="audio/*"
-                  onChange={handleFileChange}
-                  disabled={loading}
-                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-3 file:px-6 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 disabled:opacity-50 cursor-pointer border-2 border-dashed border-blue-300 rounded-lg py-8 text-center hover:border-blue-400 transition-colors"
-                />
-              </div>
-              {file && (
-                <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-sm text-green-800">
-                    ✓ Selected: {file.name}
+              {tab === "record" ? (
+                <div className="bg-gray-50 rounded-xl p-8 border border-gray-200">
+                  <AudioRecorder
+                    onRecordingComplete={handleRecordingComplete}
+                    isAnalyzing={loading}
+                  />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="audio/*"
+                    onChange={handleFileChange}
+                    disabled={loading}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={loading}
+                    className="w-full py-12 px-8 border-2 border-dashed border-gray-300 rounded-xl hover:border-gray-400 hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <div className="text-center">
+                      <div className="text-5xl mb-3">📁</div>
+                      <p className="text-lg font-semibold text-gray-900 mb-1">
+                        Click to upload audio
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        or drag and drop (MP3, WAV, M4A, etc.)
+                      </p>
+                    </div>
+                  </button>
+
+                  {file && (
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+                      <p className="text-sm text-emerald-800">
+                        ✓ Selected: {file.name}
+                      </p>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-gray-500">
+                    Audio must be between 30-45 seconds
                   </p>
                 </div>
               )}
-              <p className="mt-3 text-xs text-gray-500">
-                Audio must be between 30-45 seconds. Supports MP3, WAV, M4A, and other audio formats.
-              </p>
             </div>
+
+            {/* Audio Preview */}
+            {recordedBlob && (
+              <div className="mb-8">
+                <p className="text-sm font-semibold text-gray-700 mb-3">
+                  Recording Preview
+                </p>
+                <AudioPlayer audioBlob={recordedBlob} fileName="Your Recording" />
+              </div>
+            )}
 
             {/* Duration Error */}
             {durationError && (
               <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex gap-3">
-                <span className="text-xl">⚠️</span>
+                <span className="text-xl flex-shrink-0">⚠️</span>
                 <p className="text-sm text-red-700">{durationError}</p>
               </div>
             )}
 
-            {/* Consent Checkbox */}
-            <div className="mb-8 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            {/* Consent */}
+            <div className="mb-8 p-5 bg-gray-100 rounded-xl border border-gray-300">
               <label className="flex items-start gap-3 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={consent}
                   onChange={(e) => setConsent(e.target.checked)}
                   disabled={loading}
-                  className="mt-1 w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 disabled:opacity-50 cursor-pointer"
+                  className="mt-1 w-5 h-5 rounded border-gray-300 text-gray-900 focus:ring-2 focus:ring-gray-500 disabled:opacity-50 cursor-pointer"
                 />
                 <span className="text-sm text-gray-700 leading-relaxed">
-                  I consent to my voice recording being processed on this
-                  server to generate a pronunciation score. My audio is not
-                  stored and is discarded after scoring.
+                  I consent to my voice recording being processed to generate a
+                  pronunciation score. My audio is not stored and is discarded immediately
+                  after scoring.
                 </span>
               </label>
             </div>
@@ -178,7 +261,7 @@ export default function UploadCard() {
             {/* API Error */}
             {apiError && (
               <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex gap-3">
-                <span className="text-xl">❌</span>
+                <span className="text-xl flex-shrink-0">❌</span>
                 <p className="text-sm text-red-700">{apiError}</p>
               </div>
             )}
@@ -186,8 +269,8 @@ export default function UploadCard() {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={isSubmitDisabled}
-              className="w-full py-3 px-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg disabled:shadow-none"
+              disabled={!file || !consent || loading || durationError !== null}
+              className="w-full py-4 px-6 bg-gray-900 hover:bg-black text-white rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl disabled:shadow-none text-lg"
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -206,8 +289,10 @@ export default function UploadCard() {
           onReset={() => {
             setResult(null);
             setFile(null);
+            setRecordedBlob(null);
             setConsent(false);
             setApiError(null);
+            setTab("record");
           }}
         />
       )}

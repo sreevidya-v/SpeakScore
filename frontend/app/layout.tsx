@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Pronunciation Scorer | Master English Pronunciation",
-  description: "AI-powered pronunciation scoring tool. Get instant feedback on your English pronunciation with phoneme-level analysis.",
+  title: "Pronunciation Master | AI-Powered English Pronunciation Scoring",
+  description: "Master English pronunciation with real-time AI feedback. Record or upload audio to get instant word-by-word analysis with phoneme-level error detection.",
 };
 
 export default function RootLayout({

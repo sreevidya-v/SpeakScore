@@ -23,11 +23,20 @@ class PhonemeDifference(TypedDict):
 # Load g2p_en once at module import time.
 _g2p = G2p()
 
-# Load wav2vec2 model and processor at module import time.
-# This model is trained on English phoneme recognition.
-_processor = AutoProcessor.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
-_model = AutoModelForCTC.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
-_model.eval()
+# Lazy-load wav2vec2 model and processor: only initialized on first use.
+# This avoids requiring espeak at import time for non-phoneme tests.
+_processor = None
+_model = None
+
+
+def _ensure_models_loaded() -> tuple:
+    """Load wav2vec2 model and processor on first use (lazy loading)."""
+    global _processor, _model
+    if _processor is None or _model is None:
+        _processor = AutoProcessor.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
+        _model = AutoModelForCTC.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
+        _model.eval()
+    return _processor, _model
 
 
 def expected_phonemes(word: str) -> list[str]:
@@ -48,6 +57,8 @@ def recognized_phonemes(wav_bytes: bytes, start: float, end: float) -> list[str]
     Returns:
         List of recognized phoneme labels.
     """
+    processor, model = _ensure_models_loaded()
+
     # Parse the WAV to extract audio data and sample rate.
     wav_buffer = io.BytesIO(wav_bytes)
     sample_rate, audio_data = wavfile.read(wav_buffer)
@@ -64,12 +75,12 @@ def recognized_phonemes(wav_bytes: bytes, start: float, end: float) -> list[str]
     # Convert to torch tensor and process through wav2vec2.
     audio_tensor = torch.from_numpy(audio_slice).unsqueeze(0)
     with torch.no_grad():
-        inputs = _processor(audio_tensor, sampling_rate=sample_rate, return_tensors="pt")
-        logits = _model(inputs["input_values"]).logits
+        inputs = processor(audio_tensor, sampling_rate=sample_rate, return_tensors="pt")
+        logits = model(inputs["input_values"]).logits
 
     # Decode predicted phoneme IDs to labels.
     predicted_ids = torch.argmax(logits, dim=-1)
-    predicted_phonemes = _processor.batch_decode(predicted_ids)
+    predicted_phonemes = processor.batch_decode(predicted_ids)
 
     # predicted_phonemes is a list of strings like "e n t ə r"; split to individual phonemes.
     phonemes = predicted_phonemes[0].split() if predicted_phonemes else []
