@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+python-multipart
+pydantic
+faster-whisper
+g2p-en
+transformers
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+torchaudio
+numpy
+scipy
+pytest
