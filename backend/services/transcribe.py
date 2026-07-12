@@ -1,5 +1,6 @@
 """Speech transcription service using faster-whisper."""
 
+import math
 import io
 from typing import TypedDict
 
@@ -17,6 +18,21 @@ class Word(TypedDict):
 
 # Load model once at module import time to avoid per-request overhead.
 _model = WhisperModel("base.en", device="cpu", compute_type="int8")
+
+
+def _confidence_from_word(word: object, segment_avg_logprob: float) -> float:
+    """Convert Whisper word metadata into a 0-100 confidence score.
+
+    faster-whisper exposes a per-word probability. That is the most direct signal
+    to use when it exists. If it is missing, fall back to the segment log-probability
+    and map it through an exponential curve so valid speech does not collapse to 0.
+    """
+    probability = getattr(word, "probability", None)
+    if probability is not None:
+        return max(0.0, min(100.0, float(probability) * 100.0))
+
+    fallback_probability = math.exp(segment_avg_logprob) if segment_avg_logprob is not None else 0.0
+    return max(0.0, min(100.0, fallback_probability * 100.0))
 
 
 def transcribe(wav_bytes: bytes) -> list[Word]:
@@ -39,8 +55,7 @@ def transcribe(wav_bytes: bytes) -> list[Word]:
         # Extract word-level timing and confidence.
         if segment.words:
             for word in segment.words:
-                # Normalize avg_logprob (typically -1 to 0) to confidence (0 to 100).
-                confidence = max(0.0, min(100.0, (1 + segment.avg_logprob) * 100))
+                confidence = _confidence_from_word(word, segment.avg_logprob)
                 words.append(
                     Word(
                         text=word.word.strip(),
@@ -51,7 +66,15 @@ def transcribe(wav_bytes: bytes) -> list[Word]:
                 )
         else:
             # Fallback: if no word-level timing, use segment as a single word.
-            confidence = max(0.0, min(100.0, (1 + segment.avg_logprob) * 100))
+            confidence = max(
+                0.0,
+                min(
+                    100.0,
+                    math.exp(segment.avg_logprob) * 100.0
+                    if segment.avg_logprob is not None
+                    else 0.0,
+                ),
+            )
             words.append(
                 Word(
                     text=segment.text.strip(),

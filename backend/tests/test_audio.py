@@ -8,6 +8,7 @@ from scipy.io import wavfile
 
 from main import app
 from services.scoring import build_response
+from services.transcribe import _confidence_from_word
 
 
 client = TestClient(app)
@@ -117,4 +118,13 @@ def test_build_response_bucket_assignment() -> None:
     assert response["words"][3]["confidence"] == 75
     assert response["words"][3]["bucket"] == "mispronounced"
     assert response["words"][3]["phonemeIssues"] is not None
+
+
+def test_word_probability_maps_to_useful_confidence() -> None:
+    """Whisper word probabilities should produce non-zero confidence for normal speech."""
+    word = type("WordLike", (), {"probability": 0.82})()
+
+    confidence = _confidence_from_word(word, segment_avg_logprob=-1.4)
+
+    assert confidence == 82.0
 
