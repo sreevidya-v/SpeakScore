@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from scipy.io import wavfile
 
 from main import app
+from services.scoring import build_response
 
 
 client = TestClient(app)
@@ -37,8 +38,11 @@ def test_valid_duration_passes() -> None:
     response = post_audio(make_sine_wav(30))
 
     assert response.status_code == 200
-    assert response.json()["status"] == "ok"
-    assert response.json()["duration"] == 30.0
+    data = response.json()
+    assert "overallScore" in data
+    assert "words" in data
+    assert isinstance(data["overallScore"], int)
+    assert isinstance(data["words"], list)
 
 
 def test_too_short_audio_is_rejected() -> None:
@@ -71,3 +75,46 @@ def test_missing_consent_is_rejected() -> None:
 
     assert response.status_code == 400
     assert response.json() == {"detail": "consent_required"}
+
+
+def test_build_response_bucket_assignment() -> None:
+    """Verify bucket classification: good (>=80), needs-work (60-79, no issues), mispronounced (<60 or has issues)."""
+    mocked_words = [
+        {"text": "hello", "confidence": 85.0, "start": 0.5, "end": 1.2},
+        {"text": "world", "confidence": 72.0, "start": 1.3, "end": 2.1},
+        {"text": "test", "confidence": 55.0, "start": 2.2, "end": 3.0},
+        {
+            "text": "word",
+            "confidence": 75.0,
+            "start": 3.1,
+            "end": 3.9,
+            "phonemeIssues": [{"type": "substitution", "expected": "W", "heard": "V"}],
+        },
+    ]
+
+    response = build_response(mocked_words, 35.0)
+
+    assert response["overallScore"] == 72  # average of 85, 72, 55, 75 = 71.75 → 72
+    assert len(response["words"]) == 4
+
+    # Word 0: confidence 85 >= 80 → "good"
+    assert response["words"][0]["word"] == "hello"
+    assert response["words"][0]["confidence"] == 85
+    assert response["words"][0]["bucket"] == "good"
+
+    # Word 1: confidence 72 in [60, 80) and no issues → "needs-work"
+    assert response["words"][1]["word"] == "world"
+    assert response["words"][1]["confidence"] == 72
+    assert response["words"][1]["bucket"] == "needs-work"
+
+    # Word 2: confidence 55 < 60 → "mispronounced"
+    assert response["words"][2]["word"] == "test"
+    assert response["words"][2]["confidence"] == 55
+    assert response["words"][2]["bucket"] == "mispronounced"
+
+    # Word 3: confidence 75 in [60, 80) but has phonemeIssues → "mispronounced"
+    assert response["words"][3]["word"] == "word"
+    assert response["words"][3]["confidence"] == 75
+    assert response["words"][3]["bucket"] == "mispronounced"
+    assert response["words"][3]["phonemeIssues"] is not None
+
